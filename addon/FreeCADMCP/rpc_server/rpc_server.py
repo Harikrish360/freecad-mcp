@@ -169,29 +169,30 @@ class FreeCADRPC:
         else:
             return {"success": False, "error": res}
 
-    def execute_code(self, code: str) -> dict[str, Any]:
-        output_buffer = io.StringIO()
-        def task():
-            try:
-                with contextlib.redirect_stdout(output_buffer):
-                    exec(code, globals())
-                FreeCAD.Console.PrintMessage("Python code executed successfully.\n")
-                return True
-            except Exception as e:
-                FreeCAD.Console.PrintError(
-                    f"Error executing Python code: {e}\n"
-                )
-                return f"Error executing Python code: {e}\n"
-
-        rpc_request_queue.put(task)
-        res = rpc_response_queue.get()
-        if res is True:
-            return {
-                "success": True,
-                "message": "Python code execution scheduled. \nOutput: " + output_buffer.getvalue()
-            }
-        else:
-            return {"success": False, "error": res}
+    # 🚫 Disabled intentionally to prevent execution
+    # def execute_code(self, code: str) -> dict[str, Any]:
+    #     output_buffer = io.StringIO()
+    #     def task():
+    #         try:
+    #             with contextlib.redirect_stdout(output_buffer):
+    #                 exec(code, globals())
+    #             FreeCAD.Console.PrintMessage("Python code executed successfully.\n")
+    #             return True
+    #         except Exception as e:
+    #             FreeCAD.Console.PrintError(
+    #                 f"Error executing Python code: {e}\n"
+    #             )
+    #             return f"Error executing Python code: {e}\n"
+    #
+    #     rpc_request_queue.put(task)
+    #     res = rpc_response_queue.get()
+    #     if res is True:
+    #         return {
+    #             "success": True,
+    #             "message": "Python code execution scheduled. \nOutput: " + output_buffer.getvalue()
+    #         }
+    #     else:
+    #         return {"success": False, "error": res}
 
     def get_objects(self, doc_name):
         doc = FreeCAD.getDocument(doc_name)
