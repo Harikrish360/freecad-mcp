@@ -169,30 +169,30 @@ class FreeCADRPC:
         else:
             return {"success": False, "error": res}
 
-    # 🚫 Disabled intentionally to prevent execution
-    # def execute_code(self, code: str) -> dict[str, Any]:
-    #     output_buffer = io.StringIO()
-    #     def task():
-    #         try:
-    #             with contextlib.redirect_stdout(output_buffer):
-    #                 exec(code, globals())
-    #             FreeCAD.Console.PrintMessage("Python code executed successfully.\n")
-    #             return True
-    #         except Exception as e:
-    #             FreeCAD.Console.PrintError(
-    #                 f"Error executing Python code: {e}\n"
-    #             )
-    #             return f"Error executing Python code: {e}\n"
-    #
-    #     rpc_request_queue.put(task)
-    #     res = rpc_response_queue.get()
-    #     if res is True:
-    #         return {
-    #             "success": True,
-    #             "message": "Python code execution scheduled. \nOutput: " + output_buffer.getvalue()
-    #         }
-    #     else:
-    #         return {"success": False, "error": res}
+
+    def execute_code(self, code: str) -> dict[str, Any]:
+        output_buffer = io.StringIO()
+        def task():
+            try:
+                with contextlib.redirect_stdout(output_buffer):
+                    exec(code, globals())
+                FreeCAD.Console.PrintMessage("Python code executed successfully.\n")
+                return True
+            except Exception as e:
+                FreeCAD.Console.PrintError(
+                    f"Error executing Python code: {e}\n"
+                )
+                return f"Error executing Python code: {e}\n"
+    
+        rpc_request_queue.put(task)
+        res = rpc_response_queue.get()
+        if res is True:
+            return {
+                "success": True,
+                "message": "Python code execution scheduled. \nOutput: " + output_buffer.getvalue()
+            }
+        else:
+            return {"success": False, "error": res}
 
     def get_objects(self, doc_name):
         doc = FreeCAD.getDocument(doc_name)
@@ -428,6 +428,95 @@ class FreeCADRPC:
         except Exception as e:
             return str(e)
 
+    def get_mating_list(self, part_name: str) -> list[str]:
+        """
+        Get the list of mating parts for a given part.
+        Returns parts that are spatially connected/mated and exist in the parts library.
+        """
+        try:
+            doc = FreeCAD.ActiveDocument
+            if doc is None:
+                FreeCAD.Console.PrintWarning("No active document found.\n")
+                return []
+        
+        # Get all available parts from the parts library
+            available_parts = self.get_parts_list()
+        
+        # Check if the part exists in the document
+            if part_name not in [obj.Name for obj in doc.Objects]:
+                FreeCAD.Console.PrintWarning(f"Part '{part_name}' not found in document.\n")
+                return []
+        
+            part = doc.getObject(part_name)
+            mated_parts = set()
+        
+        # Method 1: Check assembly constraints (Assembly 3, Assembly 4, A2plus)
+            for obj in doc.Objects:
+                if 'Constraint' in obj.TypeId:
+                    if hasattr(obj, 'References') and obj.References:
+                        try:
+                            part_names = [ref[0].Name for ref in obj.References if hasattr(ref[0], 'Name')]
+                            if part_name in part_names:
+                            # Add other parts in this constraint
+                                mated_parts.update([p for p in part_names if p != part_name])
+                        except Exception as e:
+                            FreeCAD.Console.PrintWarning(f"Error processing constraint: {e}\n")
+        
+        # Method 2: Check parent-child relationships in groups/assemblies
+            if hasattr(part, 'InList'):
+                for parent in part.InList:
+                    if hasattr(parent, 'Group'):
+                    # This part is in a group/assembly with other parts
+                        for sibling in parent.Group:
+                            if sibling.Name != part_name:
+                                mated_parts.add(sibling.Name)
+        
+        # Method 3: Check spatial proximity (geometric mating detection)
+        # This detects parts that are physically touching or very close
+            if hasattr(part, 'Shape') and part.Shape:
+                part_bbox = part.Shape.BoundBox
+                for obj in doc.Objects:
+                    if obj.Name != part_name and hasattr(obj, 'Shape') and obj.Shape:
+                        try:
+                            obj_bbox = obj.Shape.BoundBox
+                            if self._are_parts_touching(part_bbox, obj_bbox):
+                                mated_parts.add(obj.Name)
+                        except Exception as e:
+                            FreeCAD.Console.PrintWarning(f"Error checking proximity for {obj.Name}: {e}\n")
+        
+        # Filter results to only include parts that match the parts library
+            result = []
+            for mated_part in mated_parts:
+                in_library = False
+            # Direct match or partial match with library parts
+                for library_part in available_parts:
+                # Check if names match (case-insensitive, partial matching)
+                    if (library_part.lower() in mated_part.lower() or 
+                        mated_part.lower() in library_part.lower()):
+                        result.append(mated_part)
+                        in_library = True
+                        break
+        
+            FreeCAD.Console.PrintMessage(f"Found {len(result)} mating parts for '{part_name}': {result}\n")
+            return result
+        
+        except Exception as e:
+         FreeCAD.Console.PrintError(f"Error in get_mating_list: {e}\n")
+         return []
+
+def _are_parts_touching(self, bbox1, bbox2, tolerance=1.0):
+    """
+    Check if two bounding boxes are touching or intersecting.
+    Uses a tolerance value to account for parts that are very close.
+    """
+    return not (
+        bbox1.XMax < bbox2.XMin - tolerance or 
+        bbox1.XMin > bbox2.XMax + tolerance or
+        bbox1.YMax < bbox2.YMin - tolerance or 
+        bbox1.YMin > bbox2.YMax + tolerance or
+        bbox1.ZMax < bbox2.ZMin - tolerance or 
+        bbox1.ZMin > bbox2.ZMax + tolerance
+    )
 
 def start_rpc_server(host="localhost", port=9875):
     global rpc_server_thread, rpc_server_instance
