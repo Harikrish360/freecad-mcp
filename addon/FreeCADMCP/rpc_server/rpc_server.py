@@ -428,24 +428,21 @@ class FreeCADRPC:
         except Exception as e:
             return str(e)
 
-    def get_mating_list(self, part_name: str) -> list[str]:
+    def get_mating_list(self, part_name: str) -> dict[str, Any]:
         """
-        Get the list of mating parts for a given part.
-        Returns parts that are spatially connected/mated and exist in the parts library.
-        """
+    Get the list of mating parts for a given part.
+    Returns dict with mated parts categorized by library status.
+    """
         try:
             doc = FreeCAD.ActiveDocument
             if doc is None:
                 FreeCAD.Console.PrintWarning("No active document found.\n")
-                return []
-        
-        # Get all available parts from the parts library
-            available_parts = self.get_parts_list()
+                return {"error": "No active document", "mated_parts": [], "not_in_library": []}
         
         # Check if the part exists in the document
             if part_name not in [obj.Name for obj in doc.Objects]:
                 FreeCAD.Console.PrintWarning(f"Part '{part_name}' not found in document.\n")
-                return []
+                return {"error": f"Part '{part_name}' not found", "mated_parts": [], "not_in_library": []}
         
             part = doc.getObject(part_name)
             mated_parts = set()
@@ -457,7 +454,6 @@ class FreeCADRPC:
                         try:
                             part_names = [ref[0].Name for ref in obj.References if hasattr(ref[0], 'Name')]
                             if part_name in part_names:
-                            # Add other parts in this constraint
                                 mated_parts.update([p for p in part_names if p != part_name])
                         except Exception as e:
                             FreeCAD.Console.PrintWarning(f"Error processing constraint: {e}\n")
@@ -466,13 +462,11 @@ class FreeCADRPC:
             if hasattr(part, 'InList'):
                 for parent in part.InList:
                     if hasattr(parent, 'Group'):
-                    # This part is in a group/assembly with other parts
                         for sibling in parent.Group:
                             if sibling.Name != part_name:
                                 mated_parts.add(sibling.Name)
         
         # Method 3: Check spatial proximity (geometric mating detection)
-        # This detects parts that are physically touching or very close
             if hasattr(part, 'Shape') and part.Shape:
                 part_bbox = part.Shape.BoundBox
                 for obj in doc.Objects:
@@ -484,39 +478,32 @@ class FreeCADRPC:
                         except Exception as e:
                             FreeCAD.Console.PrintWarning(f"Error checking proximity for {obj.Name}: {e}\n")
         
-        # Filter results to only include parts that match the parts library
-            result = []
+        # Categorize results by library status
+            result = {
+                "mated_parts": [],
+                "not_in_library": []
+            }
+        
+            available_parts = self.get_parts_list()
+        
             for mated_part in mated_parts:
                 in_library = False
-            # Direct match or partial match with library parts
                 for library_part in available_parts:
-                # Check if names match (case-insensitive, partial matching)
-                    if (library_part.lower() in mated_part.lower() or 
-                        mated_part.lower() in library_part.lower()):
-                        result.append(mated_part)
+                    if library_part.lower() in mated_part.lower() or mated_part.lower() in library_part.lower():
+                        result["mated_parts"].append(mated_part)
                         in_library = True
                         break
+            
+                if not in_library:
+                    result["not_in_library"].append(mated_part)
         
-            FreeCAD.Console.PrintMessage(f"Found {len(result)} mating parts for '{part_name}': {result}\n")
+            FreeCAD.Console.PrintMessage(f"Found {len(mated_parts)} mating parts for '{part_name}': {result}\n")
             return result
         
         except Exception as e:
-         FreeCAD.Console.PrintError(f"Error in get_mating_list: {e}\n")
-         return []
+            FreeCAD.Console.PrintError(f"Error in get_mating_list: {e}\n")
+            return {"error": str(e), "mated_parts": [], "not_in_library": []}
 
-def _are_parts_touching(self, bbox1, bbox2, tolerance=1.0):
-    """
-    Check if two bounding boxes are touching or intersecting.
-    Uses a tolerance value to account for parts that are very close.
-    """
-    return not (
-        bbox1.XMax < bbox2.XMin - tolerance or 
-        bbox1.XMin > bbox2.XMax + tolerance or
-        bbox1.YMax < bbox2.YMin - tolerance or 
-        bbox1.YMin > bbox2.YMax + tolerance or
-        bbox1.ZMax < bbox2.ZMin - tolerance or 
-        bbox1.ZMin > bbox2.ZMax + tolerance
-    )
 
 def start_rpc_server(host="localhost", port=9875):
     global rpc_server_thread, rpc_server_instance
