@@ -580,8 +580,8 @@ class FreeCADRPC:
             }
 
 
-def _are_parts_touching(self, bbox1, bbox2, tolerance=0.1):
-    """
+    def _are_parts_touching(self, bbox1, bbox2, tolerance=0.1):
+        """
     Check if two bounding boxes are touching or intersecting.
     
     Args:
@@ -596,14 +596,14 @@ def _are_parts_touching(self, bbox1, bbox2, tolerance=0.1):
         Returns False if boxes are completely separated in ANY axis.
         Returns True if boxes overlap or are within tolerance distance.
     """
-    return not (
-        bbox1.XMax < bbox2.XMin - tolerance or  # bbox1 is completely left of bbox2
-        bbox1.XMin > bbox2.XMax + tolerance or  # bbox1 is completely right of bbox2
-        bbox1.YMax < bbox2.YMin - tolerance or  # bbox1 is completely behind bbox2
-        bbox1.YMin > bbox2.YMax + tolerance or  # bbox1 is completely in front of bbox2
-        bbox1.ZMax < bbox2.ZMin - tolerance or  # bbox1 is completely below bbox2
-        bbox1.ZMin > bbox2.ZMax + tolerance     # bbox1 is completely above bbox2
-    )
+        return not (
+            bbox1.XMax < bbox2.XMin - tolerance or  # bbox1 is completely left of bbox2
+            bbox1.XMin > bbox2.XMax + tolerance or  # bbox1 is completely right of bbox2
+            bbox1.YMax < bbox2.YMin - tolerance or  # bbox1 is completely behind bbox2
+            bbox1.YMin > bbox2.YMax + tolerance or  # bbox1 is completely in front of bbox2
+            bbox1.ZMax < bbox2.ZMin - tolerance or  # bbox1 is completely below bbox2
+            bbox1.ZMin > bbox2.ZMax + tolerance     # bbox1 is completely above bbox2
+        )
 
 
 def start_rpc_server(host="localhost", port=9875):
